@@ -39,3 +39,15 @@ class DateTranslator(object):
         se = pd.to_datetime(se.astype(np.int32).astype(str), format='%Y%m%d', errors='coerce')
         se[se == datetime(1800, 01, 01)] = np.nan
         return se
+
+
+def value_map(se, map_dict):
+    b.check_series(se)
+    b.check_dict(map_dict)
+    se=se.copy()
+    for k in map_dict:
+        v = map_dict[k]
+        se[se == k] = v
+    return se
+
+

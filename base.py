@@ -19,17 +19,33 @@ def check_col_exist(df, col_name):
         raise KeyError("DataFrame doesn't contain column named %s" % col_name)
 
 
+def check_type(data, data_type):
+    '''
+    Check if type of data is data_type
+    :param data
+    :return: Boolean
+    '''
+    if isinstance(data, data_type):
+        return True
+    else:
+        input_type=type(data)
+        raise TypeError('Se should be %s instead of %s' % (data_type,input_type))
+
+def check_dict(data):
+    '''
+    Check data is dict
+    :param data: dict
+    :return: Boolean
+    '''
+    return check_type(data,dict)
+
 def check_dataframe(df):
     '''
     Check df is the pd.DataFrame
     :param df:DataFrame
     :return:Boolean
     '''
-    if isinstance(df, pd.DataFrame):
-        return True
-    else:
-        input_type=type(df)
-        raise TypeError('Df should be DataFrame instead of %s' % input_type)
+    return check_dataframe(df,pd.DataFrame)
 
 
 def check_series(se):
@@ -38,15 +54,13 @@ def check_series(se):
     :param se:
     :return:Boolean
     '''
-    if isinstance(se,pd.Series):
-        return True
-    else:
-        input_type=type(se)
-        raise TypeError('Se should be Series instead of %s' % input_type)
+    return check_type(se,pd.Series)
 
 
 def show_all_dataframe():
     pd.set_option('display.max_column',1000)
     pd.set_option('display.width',1000)
+
+
 
 
