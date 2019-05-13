@@ -42,6 +42,9 @@ if __name__=="__main__":
     feat_area_economy = fg.FeatureOneHot()
     area_economy_df = feat_area_economy.generate(area_se, 'area_economy')
     cust_feats = pd.merge(cust_feats, area_economy_df, how='left', left_index=True, right_index=True)
+    feat_extract_col = fg.FeatureExtractColumn(cust_info)
+    cust_feats['cust_start_asset']=feat_extract_col.generate('start_jyzc','cust_start_asset')
+    cust_feats['cust_start_asset_ln']=feat_extract_col.generate_log1p('start_jyzc','cust_start_asset')
 
 
 

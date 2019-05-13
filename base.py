@@ -22,14 +22,16 @@ def check_col_exist(df, col_name):
 def check_type(data, data_type):
     '''
     Check if type of data is data_type
-    :param data
+    :param data:
+    :param data_type:
     :return: Boolean
     '''
     if isinstance(data, data_type):
         return True
     else:
-        input_type=type(data)
-        raise TypeError('Se should be %s instead of %s' % (data_type,input_type))
+        input_type = type(data)
+        raise TypeError('Se should be %s instead of %s' % (data_type, input_type))
+
 
 def check_dict(data):
     '''
@@ -37,7 +39,8 @@ def check_dict(data):
     :param data: dict
     :return: Boolean
     '''
-    return check_type(data,dict)
+    return check_type(data, dict)
+
 
 def check_dataframe(df):
     '''
@@ -45,7 +48,7 @@ def check_dataframe(df):
     :param df:DataFrame
     :return:Boolean
     '''
-    return check_dataframe(df,pd.DataFrame)
+    return check_type(df, pd.DataFrame)
 
 
 def check_series(se):
@@ -54,12 +57,52 @@ def check_series(se):
     :param se:
     :return:Boolean
     '''
-    return check_type(se,pd.Series)
+    return check_type(se, pd.Series)
 
 
 def show_all_dataframe():
-    pd.set_option('display.max_column',1000)
-    pd.set_option('display.width',1000)
+    pd.set_option('display.max_column', 1000)
+    pd.set_option('display.width', 1000)
+
+
+def add_prefix_on_col_name(df, prefix=''):
+    '''
+    Add prefix for DataFrame
+    :param df: DataFrame
+    :param prefix: str
+    :return: DataFrame
+    '''
+    check_dataframe(df)
+    if len(prefix) > 0:
+        prefix = prefix + '_'
+    col_names = df.columns
+    col_names_new = {}
+    for c in col_names:
+        col_names_new[c] = prefix + str(c)
+    df.rename(columns=col_names_new,inplace=True)
+    return df
+
+
+def add_suffix_on_col_name(df, suffix=''):
+    '''
+    Add prefix for DataFrame
+    :param df: DataFrame
+    :param prefix: str
+    :return: DataFrame
+    '''
+    check_dataframe(df)
+    if len(suffix) > 0:
+        suffix = '_' + suffix
+    col_names = df.columns
+    col_names_new = {}
+    for c in col_names:
+        col_names_new[c] = suffix + str(c)
+    df.rename(columns=col_names_new,inplace=True)
+    return df
+
+
+
+
 
 
 
