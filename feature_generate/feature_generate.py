@@ -125,7 +125,7 @@ class FeatureAgeBin(Feature):
 
 
 class FeatsTradeTS(Feature):
-    def __init__(self, data, cust_id_col, date_col, aim_col, func ,feat_name, window=5):
+    def __init__(self, data, cust_id_col, date_col, aim_col, func, feat_name, window=5):
         self.cust_id_col = cust_id_col
         self.date_col = date_col
         self.aim_col = aim_col
@@ -179,7 +179,7 @@ class FeatsTradeTS(Feature):
         :return: pandas.DataFrame
         '''
         func = self.func
-        window_data = self.data_grouped.agg(lambda x: func(x)).unstack()
+        window_data = self.data_grouped.agg(func).unstack()
         feat_name = self.feat_name
         b.add_prefix_on_col_name(window_data, feat_name)
         window_data.fillna(0, inplace=True)
