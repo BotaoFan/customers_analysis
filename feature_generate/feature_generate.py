@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import sklearn.preprocessing as sk_preprocessing
 from sklearn.preprocessing import OneHotEncoder
+from collections import defaultdict
 
 from datetime import datetime
 from .. import base as b
@@ -123,39 +124,107 @@ class FeatureAgeBin(Feature):
         return self.generate_from_age(age_se, bins, right)
 
 
-class FeatsGroupTrade(Feature):
-    def __init__(self,data, cust_id_col, date_col, aim_col, feat_name, window=5):
+class FeatsTradeTS(Feature):
+    def __init__(self, data, cust_id_col, date_col, aim_col, func ,feat_name, window=5):
         self.cust_id_col = cust_id_col
         self.date_col = date_col
         self.aim_col = aim_col
         self.feat_name = feat_name
-
-        date_array = data[date_col].unique().sort()
+        self.func = self._check_func(func)
+        date_array = data[date_col].unique()
+        date_array.sort()
         date_len = (len(date_array)//window)*window
         date_array = date_array[len(date_array)-date_len:]
         date_dict = {'date': date_array, 'date_id': range(date_len), 'window_id': np.array(range(date_len)) // window}
+        self.window_num = date_len // window
         self.date_df = pd.DataFrame(date_dict)
         self.data = pd.merge(data[[cust_id_col, date_col, aim_col]], self.date_df,
                              how='inner', left_on=date_col, right_on='date')
-        self.data_grouped=self.data.groupby([cust_id_col,'window_id'])[aim_col]
+        self.data_grouped = self.data.groupby([cust_id_col, 'window_id'])[aim_col]
+        self.window_data = None
+        self.window_data_ratio = None
+        self.window_data_stats = None
+        self.window_data_ratio_polyfit = None
+        self.window_data_ratio_polyfit_sign = None
 
-    def generate_window_count(self):
+    def _check_func(self,func):
+        str_func = {'count' : len, 'sum' : np.sum, 'max' : np.max, 'min' : np.min, 'median' : np.median, 'mean' : np.mean,
+                    'std' : np.std}
+        if isinstance(func,str):
+            try:
+                return str_func[func]
+            except:
+                print str_func
+                raise KeyError('String function %s not in function list, try string above' % func)
+        else:
+            return func
+
+    def _check_window_data_exist(self):
+        if self.window_data is None:
+            window_data = self.generate_window_data()
+        else:
+            window_data = self.window_data
+        return window_data
+
+    def _check_window_data_ratio_exist(self):
+        if self.window_data_ratio is None:
+            window_data_ratio = self.generate_window_data_ratio()
+        else:
+            window_data_ratio = self.window_data_ratio
+        return window_data_ratio
+
+    def generate_window_data(self):
         '''
         Generate count of aim_col during every window
         :return: pandas.DataFrame
         '''
-        data_window_count = self.data_grouped.count().unstack()
-        col_names = data_window_count.columns
-        col_names_new = {}
+        func = self.func
+        window_data = self.data_grouped.agg(lambda x: func(x)).unstack()
         feat_name = self.feat_name
-        b.add_prefix_on_col_name(data_window_count,feat_name)
-        return data_window_count
+        b.add_prefix_on_col_name(window_data, feat_name)
+        window_data.fillna(0, inplace=True)
+        self.window_data = window_data.copy()
+        return window_data
+
+    def generate_window_data_ratio(self):
+        window_data = self._check_window_data_exist()
+        window_data_ratio = window_data.div(window_data.sum(axis=1), axis='index')
+        feat_name = self.feat_name + '_ratio'
+        b.add_prefix_on_col_name(window_data_ratio, feat_name)
+        self.window_data_ratio = window_data_ratio.copy()
+        return window_data_ratio
+
+    def generate_window_data_ratio_polyfit(self,poly_n):
+        self._check_window_data_ratio_exist()
+        window_data_ratio = self.window_data_ratio
+        window_num = self.window_num
+        reg_x = range(1, window_num+1)
+        polynomial = window_data_ratio.apply(lambda y: np.polyfit(reg_x, y.values, poly_n), axis=1)
+        window_data_ratio_polyfit = pd.DataFrame(index=polynomial.index)
+        window_data_ratio_polyfit_sign = pd.DataFrame(index=polynomial.index)
+        for i in range(poly_n+1):
+            window_data_ratio_polyfit[str(i)] = polynomial.apply(lambda x: x[poly_n-i-1])
+            window_data_ratio_polyfit_sign[str(i)] = polynomial.apply(lambda x: 1 if (x[poly_n-i-1]) > 0 else 0)
+        b.add_prefix_on_col_name(window_data_ratio_polyfit, self.feat_name+'_ratio_poly')
+        self.window_data_ratio_polyfit = window_data_ratio_polyfit
+        self.window_data_ratio_polyfit_sign = window_data_ratio_polyfit_sign
+        return window_data_ratio_polyfit, window_data_ratio_polyfit_sign
 
     def generate_whole_stats(self):
-        data_whole_stats = self.data.groupby([self.cust_id_col])['sno'].describle()
+        window_data = self._check_window_data_exist()
+        window_data_t = window_data.T
+        window_data_stats_t = window_data_t.describe()
+        window_data_stats = window_data_stats_t.T
+        window_data_stats.drop(columns=['count'], inplace=True)
+        window_data_stats['sum'] = window_data.sum(axis=1)
+        window_data_stats['skew'] = window_data.skew(axis=1)
+        window_data_stats['kurt'] = window_data.kurt(axis=1)
         feat_name = self.feat_name
-        b.add_prefix_on_col_name(data_whole_stats, feat_name)
-        return data_whole_stats
+        b.add_prefix_on_col_name(window_data_stats, feat_name)
+        self.window_data_stats = window_data_stats.copy()
+        return window_data_stats
+
+
 
 
 

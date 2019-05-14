@@ -2,20 +2,23 @@
 # @Time : 2019/5/12
 # @Author : Botao Fan
 import pandas as pd
+import numpy as np
 
-from . import base as b
-from .data_preprocess import base as dp_base
-from .feature_generate import feature_generate as fg
-
+import customers_analysis.base as b
+from customers_analysis.data_preprocess import base as dp_base
+from customers_analysis.feature_generate import feature_generate as fg
+import warnings
 
 if __name__=="__main__":
+    warnings.filterwarnings('ignore')
     #Prepare cust_feats
-    hdf=pd.HDFStore('feature_data.h5')
+    hdf=pd.HDFStore('../model_and_data/feature_data.h5')
     cust_info=hdf['cust_info']
     cust_trade=hdf['cust_trade']
     hdf.close()
     cust_info.set_index('khh',drop=False,inplace=True)
-    cust_feats=cust_info[['khh']]
+    cust_feats = cust_info[['khh']]
+    cust_trade_feats = cust_info[['khh']]
 
     #cust_age
     feat_cust_age=fg.FeatureAge()
@@ -43,8 +46,15 @@ if __name__=="__main__":
     area_economy_df = feat_area_economy.generate(area_se, 'area_economy')
     cust_feats = pd.merge(cust_feats, area_economy_df, how='left', left_index=True, right_index=True)
     feat_extract_col = fg.FeatureExtractColumn(cust_info)
-    cust_feats['cust_start_asset']=feat_extract_col.generate('start_jyzc','cust_start_asset')
-    cust_feats['cust_start_asset_ln']=feat_extract_col.generate_log1p('start_jyzc','cust_start_asset')
+    cust_feats['cust_start_asset'] = feat_extract_col.generate('start_jyzc', 'cust_start_asset')
+    cust_feats['cust_start_asset_ln'] = feat_extract_col.generate_log1p('start_jyzc', 'cust_start_asset')
+    #Generate trade features
+    feat_trade_ts = fg.FeatsTradeTS(cust_trade, 'custid', 'bizdate_date', 'sno', 'trade_count')
+    window_count = feat_trade_ts.generate_window_data()
+    window_count_ratio = feat_trade_ts.generate_window_data_ratio()
+    whole_count_stats = feat_trade_ts.generate_whole_stats()
+
+
 
 
 
