@@ -189,7 +189,7 @@ class FeatsTradeTS(Feature):
     def generate_window_data_ratio(self):
         window_data = self._check_window_data_exist()
         window_data_ratio = window_data.div(window_data.sum(axis=1), axis='index')
-        feat_name = self.feat_name + '_ratio'
+        feat_name = 'ratio_'
         b.add_prefix_on_col_name(window_data_ratio, feat_name)
         self.window_data_ratio = window_data_ratio.copy()
         return window_data_ratio

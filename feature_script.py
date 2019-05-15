@@ -49,10 +49,17 @@ if __name__=="__main__":
     cust_feats['cust_start_asset'] = feat_extract_col.generate('start_jyzc', 'cust_start_asset')
     cust_feats['cust_start_asset_ln'] = feat_extract_col.generate_log1p('start_jyzc', 'cust_start_asset')
     #Generate trade features
-    feat_trade_ts = fg.FeatsTradeTS(cust_trade, 'custid', 'bizdate_date', 'sno', 'trade_count')
+    feat_trade_ts = fg.FeatsTradeTS(cust_trade, 'custid', 'bizdate_date', 'sno', 'sum', 'trade_count')
     window_count = feat_trade_ts.generate_window_data()
     window_count_ratio = feat_trade_ts.generate_window_data_ratio()
+    window_count_ratio_poly, window_data_ratio_polyfit_sign = feat_trade_ts.generate_window_data_ratio_polyfit(3)
     whole_count_stats = feat_trade_ts.generate_whole_stats()
+    cust_trade_feats = pd.merge(cust_trade_feats, window_count, how='left', left_index=True, right_index=True)
+    cust_trade_feats = pd.merge(cust_trade_feats, window_count_ratio, how='left', left_index=True, right_index=True)
+    cust_trade_feats = pd.merge(cust_trade_feats, window_count_ratio_poly, how='left', left_index=True, right_index=True)
+    cust_trade_feats = pd.merge(cust_trade_feats, window_data_ratio_polyfit_sign, how='left', left_index=True, right_index=True)
+    cust_trade_feats = pd.merge(cust_trade_feats, whole_count_stats, how='left', left_index=True, right_index=True)
+    del window_count, window_count_ratio, window_count_ratio_poly, window_data_ratio_polyfit_sign, whole_count_stats
 
 
 
