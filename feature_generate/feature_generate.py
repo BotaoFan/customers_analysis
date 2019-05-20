@@ -12,6 +12,20 @@ from datetime import datetime
 from .. import base as b
 from ..data_preprocess import base as dp_base
 
+
+def _check_func(func):
+    str_func = {'count': len, 'sum': np.sum, 'max': np.max, 'min': np.min, 'median': np.median, 'mean': np.mean,
+                'std': np.std}
+    if isinstance(func, str):
+        try:
+            return str_func[func]
+        except:
+            print str_func
+            raise KeyError('String function %s not in function list, try string above' % func)
+    else:
+        return func
+
+
 class Feature(object):
     def __init__(self):
         pass
@@ -124,7 +138,107 @@ class FeatureAgeBin(Feature):
         return self.generate_from_age(age_se, bins, right)
 
 
-class FeatsTradeTS(Feature):
+class AbstractFeatGroupData(Feature):
+    def __init__(self, data, cust_id_col, groupby_col, aim_col, func, feat_name):
+        b.check_dataframe(data)
+        b.check_col_exist(data, cust_id_col)
+        b.check_col_exist(data, groupby_col)
+        b.check_col_exist(data, aim_col)
+        b.check_type(feat_name, str)
+        self.cust_id = cust_id_col
+        self.groupby_id = groupby_col
+        self.aim_id = aim_col
+        self.func = self._check_func(func)
+        self.feat_name = feat_name
+        self.data_grouped = data.groupby([cust_id_col, groupby_col])[aim_col]
+        self.agg_data = None
+        self.agg_data_norm = None
+        self.agg_data_ratio = None
+
+
+    def _check_func(self,func):
+        str_func = {'count': len, 'sum': np.sum, 'max': np.max, 'min': np.min, 'median': np.median, 'mean': np.mean,
+                    'std': np.std}
+        if isinstance(func, str):
+            try:
+                return str_func[func]
+            except:
+                print str_func
+                raise KeyError('String function %s not in function list, try string above' % func)
+        else:
+            return func
+
+    def _generate_agg_data_polyfit(self, data, poly_n, prefix):
+        reg_x = range(1, data.shape[1] + 1)
+        polynomial = data.apply(lambda y: np.polyfit(reg_x, y.values, poly_n), axis=1)
+        data_polyfit, data_polyfit_sign = pd.DataFrame(index=polynomial.index), pd.DataFrame(index=polynomial.index)
+        for i in range(poly_n+1):
+            data_polyfit[str(i)] = polynomial.apply(lambda x: x[poly_n-i-1])
+            data_polyfit_sign[str(i)] = polynomial.apply(lambda x: 1 if (x[poly_n-i-1]) > 0 else 0)
+        b.add_prefix_on_col_name(data_polyfit, self.feat_name + '_' + prefix + '_poly')
+        b.add_prefix_on_col_name(data_polyfit_sign, self.feat_name + '_' + prefix + '_poly_sign')
+        return data_polyfit, data_polyfit_sign
+
+    def _generate_stats(self, data):
+        data_stats = data.T.describe().T
+        data_stats.drop(columns=['count'], inplace=True)
+        data_stats['sum'] = data.sum(axis=1)
+        data_stats['skew'] = data.skew(axis=1)
+        data_stats['kurt'] = data.kurt(axis=1)
+        b.add_prefix_on_col_name(data_stats, self.feat_name)
+        return data_stats
+
+    def generate_agg_data(self):
+        func = self.func
+        agg_data = self.data_grouped.agg(func).unstack()
+        agg_data.fillna(0, inplace=True)
+        b.add_prefix_on_col_name(agg_data, self.feat_name)
+        self.agg_data = agg_data.copy()
+        return agg_data
+
+    def generate_agg_data_norm(self):
+        agg_data = self.generate_agg_data() if self.agg_data is None else self.agg_data
+        agg_data_norm = agg_data.sub(agg_data.mean(axis=1), axis='index').div(agg_data.std(axis=1), axis='index')
+        b.add_prefix_on_col_name(agg_data_norm, 'norm')
+        self.agg_data_norm = agg_data_norm.copy()
+        return agg_data_norm
+
+    def generate_agg_data_ratio(self):
+        agg_data = self.generate_agg_data() if self.agg_data is None else self.agg_data
+        agg_data_ratio = agg_data.div(agg_data.sum(axis=1), axis='index')
+        b.add_prefix_on_col_name(agg_data_ratio, 'ratio')
+        self.agg_data_ratio = agg_data_ratio.copy()
+        return agg_data_ratio
+
+    def generate_agg_data_ratio_polyfit(self, poly_n):
+        agg_data_ratio = self.generate_agg_data_ratio() if self.agg_data_ratio is None else self.agg_data_ratio
+        agg_data_ratio_polyfit, agg_data_ratio_polyfit_sign = \
+            self._generate_agg_data_polyfit(agg_data_ratio, poly_n, 'ratio')
+        return agg_data_ratio_polyfit, agg_data_ratio_polyfit_sign
+
+    def generate_agg_data_norm_polyfit(self, poly_n):
+        agg_data_norm = self.generate_agg_data_norm() if self.agg_data_norm is None else self.agg_data_norm
+        agg_data_norm_polyfit, agg_data_norm_polyfit_sign = \
+            self._generate_agg_data_polyfit(agg_data_norm, poly_n, 'norm')
+        return agg_data_norm_polyfit, agg_data_norm_polyfit_sign
+
+    def generate_data_stats(self):
+        agg_data = self.generate_agg_data() if self.agg_data is None else self.agg_data
+        agg_data_stats = self._generate_stats(agg_data)
+        return agg_data_stats
+
+    def generate_data_ratio_stats(self):
+        agg_data_ratio = self.generate_agg_data_ratio() if self.agg_data_ratio is None else self.agg_data_ratio
+        agg_data_ratio_stats = self._generate_stats(agg_data_ratio)
+        return agg_data_ratio_stats
+
+    def generate_data_norm_stats(self):
+        agg_data_norm = self.generate_agg_data_norm() if self.agg_data_norm is None else self.agg_data_norm
+        agg_data_norm_stats = self._generate_stats(agg_data_norm)
+        return agg_data_norm_stats
+
+
+class FeatureTradeTS(Feature):
     def __init__(self, data, cust_id_col, date_col, aim_col, func, feat_name, window=5):
         self.cust_id_col = cust_id_col
         self.date_col = date_col
@@ -189,7 +303,7 @@ class FeatsTradeTS(Feature):
     def generate_window_data_ratio(self):
         window_data = self._check_window_data_exist()
         window_data_ratio = window_data.div(window_data.sum(axis=1), axis='index')
-        feat_name = 'ratio_'
+        feat_name = 'ratio'
         b.add_prefix_on_col_name(window_data_ratio, feat_name)
         self.window_data_ratio = window_data_ratio.copy()
         return window_data_ratio
@@ -206,8 +320,9 @@ class FeatsTradeTS(Feature):
             window_data_ratio_polyfit[str(i)] = polynomial.apply(lambda x: x[poly_n-i-1])
             window_data_ratio_polyfit_sign[str(i)] = polynomial.apply(lambda x: 1 if (x[poly_n-i-1]) > 0 else 0)
         b.add_prefix_on_col_name(window_data_ratio_polyfit, self.feat_name+'_ratio_poly')
-        self.window_data_ratio_polyfit = window_data_ratio_polyfit
-        self.window_data_ratio_polyfit_sign = window_data_ratio_polyfit_sign
+        b.add_prefix_on_col_name(window_data_ratio_polyfit_sign, self.feat_name+'_ratio_poly_sign')
+        self.window_data_ratio_polyfit = window_data_ratio_polyfit.copy()
+        self.window_data_ratio_polyfit_sign = window_data_ratio_polyfit_sign.copy()
         return window_data_ratio_polyfit, window_data_ratio_polyfit_sign
 
     def generate_whole_stats(self):
@@ -224,6 +339,25 @@ class FeatsTradeTS(Feature):
         self.window_data_stats = window_data_stats.copy()
         return window_data_stats
 
+
+class FeatureTradeTarget(Feature):
+    def __init__(self, data, cust_id_col, aim_col, stock_indu_col, func):
+        col_list = [cust_id_col, aim_col, stock_indu_col]
+        for col_name in [cust_id_col, aim_col, stock_indu_col]:
+            b.check_col_exist(data, col_name)
+        self.cust_id_col = cust_id_col
+        self.aim_col = aim_col
+        self.stock_indu_col = stock_indu_col
+        self.data = data[col_list]
+        self.data_group = data.groupbu([cust_id_col,stock_indu_col])
+        self.func = _check_func(func)
+
+
+    def generate_data_(self):
+        data_group = self.data_group
+        cust_id_col = self.cust_id_col
+        aim_col = self.aim_col
+        stock_indu_col = self.stock_indu_col
 
 
 

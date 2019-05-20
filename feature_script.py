@@ -12,9 +12,10 @@ import warnings
 if __name__=="__main__":
     warnings.filterwarnings('ignore')
     #Prepare cust_feats
-    hdf=pd.HDFStore('../model_and_data/feature_data.h5')
-    cust_info=hdf['cust_info']
-    cust_trade=hdf['cust_trade']
+    hdf = pd.HDFStore('../model_and_data/feature_data.h5')
+    cust_info = hdf['cust_info']
+    cust_trade = hdf['cust_trade']
+    stock_info = hdf['stock_info']
     hdf.close()
     cust_info.set_index('khh',drop=False,inplace=True)
     cust_feats = cust_info[['khh']]
@@ -49,7 +50,7 @@ if __name__=="__main__":
     cust_feats['cust_start_asset'] = feat_extract_col.generate('start_jyzc', 'cust_start_asset')
     cust_feats['cust_start_asset_ln'] = feat_extract_col.generate_log1p('start_jyzc', 'cust_start_asset')
     #Generate trade features
-    feat_trade_ts = fg.FeatsTradeTS(cust_trade, 'custid', 'bizdate_date', 'sno', 'sum', 'trade_count')
+    feat_trade_ts = fg.FeatureTradeTS(cust_trade, 'custid', 'bizdate_date', 'sno', 'sum', 'trade_count')
     window_count = feat_trade_ts.generate_window_data()
     window_count_ratio = feat_trade_ts.generate_window_data_ratio()
     window_count_ratio_poly, window_data_ratio_polyfit_sign = feat_trade_ts.generate_window_data_ratio_polyfit(3)

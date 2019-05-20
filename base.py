@@ -79,7 +79,7 @@ def add_prefix_on_col_name(df, prefix=''):
     col_names_new = {}
     for c in col_names:
         col_names_new[c] = prefix + str(c)
-    df.rename(columns=col_names_new,inplace=True)
+    df.rename(columns=col_names_new, inplace=True)
     return df
 
 
