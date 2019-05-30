@@ -18,7 +18,7 @@ class DateTranslator(object):
 
     def clean_str_date(self, date_series):
         '''
-
+        Translate na or illegal number to '18000101'
         :param date_series
         :return:Series
         '''
@@ -27,13 +27,19 @@ class DateTranslator(object):
         b.check_series(date_series)
         # Translate all illegal date(in string format):null,length less then 8 to '18000101'
         se = date_series.copy()
-        condition = (se.isnull()) | (se.astype(np.int32).astype(str).apply(lambda x: len(x) < 8))
+        se.loc[se.isnull(), ] = '18000101'
+        condition = (se.astype(np.int32).astype(str).apply(lambda x: len(x) < 8))
         se.loc[condition, ] = '18000101'
         # se.loc[se[col_name].isnull(), ] = np.nan
         # se.loc[se[col_name].astype(np.int32).astype(str).apply(lambda x: len(x) < 8),]=np.nan
         return se
 
     def covert_str_date(self, date_series):
+        '''
+        Translate date_series from string to datetime
+        :param date_series:
+        :return:
+        '''
         se = date_series.copy()
         se = self.clean_str_date(se)
         se = pd.to_datetime(se.astype(np.int32).astype(str), format='%Y%m%d', errors='coerce')

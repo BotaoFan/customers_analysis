@@ -1,13 +1,13 @@
 #-*- coding:utf-8 -*-
 # @Time : 2019/5/10
 # @Author : Botao Fan
+from __future__ import division
 
 import pandas as pd
 import numpy as np
 import sklearn.preprocessing as sk_preprocessing
 from sklearn.preprocessing import OneHotEncoder
 from collections import defaultdict
-
 from datetime import datetime
 from .. import base as b
 from ..data_preprocess import base as dp_base
@@ -43,7 +43,7 @@ class FeatureExtractColumn(Feature):
         b.check_dataframe(data)
         self.data = data
 
-    def generate(self,col_name,feature_name=None):
+    def generate(self, col_name, feature_name=None):
         '''
         Extract one column as single feature without any manipulate
         :param col_name:str
@@ -93,8 +93,8 @@ class FeatureAge(Feature):
         :param compare_date: datetime.datetime, calculate age from this date
         :return: Series named age contains float
         '''
-        date_translator=dp_base.DateTranslator()
-        birthday_se_date=date_translator.covert_str_date(birthday_se)
+        date_translator = dp_base.DateTranslator()
+        birthday_se_date = date_translator.covert_str_date(birthday_se)
         return self.generate_from_date_birthday(birthday_se_date)
 
     def generate_from_date_birthday(self, birthday_se, compare_date=None):
@@ -152,7 +152,8 @@ class AbstractFeatGroupData(Feature):
         self.feat_name = feat_name
         self.data_grouped = data.groupby([cust_id_col, groupby_col])[aim_col]
         self.agg_data = None
-        self.agg_data_norm = None
+        self.agg_data_norm_index = None
+        self.agg_data_norm_columns = None
         self.agg_data_ratio = None
 
 
@@ -179,13 +180,13 @@ class AbstractFeatGroupData(Feature):
         b.add_prefix_on_col_name(data_polyfit_sign, self.feat_name + '_' + prefix + '_poly_sign')
         return data_polyfit, data_polyfit_sign
 
-    def _generate_stats(self, data):
+    def _generate_stats(self, data, prefix):
         data_stats = data.T.describe().T
         data_stats.drop(columns=['count'], inplace=True)
         data_stats['sum'] = data.sum(axis=1)
         data_stats['skew'] = data.skew(axis=1)
         data_stats['kurt'] = data.kurt(axis=1)
-        b.add_prefix_on_col_name(data_stats, self.feat_name)
+        b.add_prefix_on_col_name(data_stats, self.feat_name + '_' + prefix)
         return data_stats
 
     def generate_agg_data(self):
@@ -196,12 +197,19 @@ class AbstractFeatGroupData(Feature):
         self.agg_data = agg_data.copy()
         return agg_data
 
-    def generate_agg_data_norm(self):
+    def generate_agg_data_norm_index(self):
         agg_data = self.generate_agg_data() if self.agg_data is None else self.agg_data
-        agg_data_norm = agg_data.sub(agg_data.mean(axis=1), axis='index').div(agg_data.std(axis=1), axis='index')
-        b.add_prefix_on_col_name(agg_data_norm, 'norm')
-        self.agg_data_norm = agg_data_norm.copy()
-        return agg_data_norm
+        agg_data_norm_index = agg_data.sub(agg_data.mean(axis=1), axis='index').div(agg_data.std(axis=1), axis='index')
+        b.add_prefix_on_col_name(agg_data_norm_index, 'norm_index')
+        self.agg_data_norm_index = agg_data_norm_index.copy()
+        return agg_data_norm_index
+
+    def generate_agg_data_norm_columns(self):
+        agg_data = self.generate_agg_data() if self.agg_data is None else self.agg_data
+        agg_data_norm_columns = (agg_data - agg_data.mean()) / agg_data.std()
+        b.add_prefix_on_col_name(agg_data_norm_columns, 'norm_columns')
+        self.agg_data_norm_columns = agg_data_norm_columns.copy()
+        return agg_data_norm_columns
 
     def generate_agg_data_ratio(self):
         agg_data = self.generate_agg_data() if self.agg_data is None else self.agg_data
@@ -210,32 +218,56 @@ class AbstractFeatGroupData(Feature):
         self.agg_data_ratio = agg_data_ratio.copy()
         return agg_data_ratio
 
+    def generate_agg_data_polyfit(self, poly_n):
+        agg_data = self.generate_agg_data() if self.agg_data is None else self.agg_data
+        agg_data_polyfit, agg_data_polyfit_sign = \
+            self._generate_agg_data_polyfit(agg_data, poly_n, 'data')
+        return agg_data_polyfit, agg_data_polyfit_sign
+
+    def generate_agg_data_norm_index_polyfit(self, poly_n):
+        agg_data_norm = self.generate_agg_data_norm_index() if self.agg_data_norm_index is None else self.agg_data_norm_index
+        agg_data_norm_polyfit, agg_data_norm_polyfit_sign = \
+            self._generate_agg_data_polyfit(agg_data_norm, poly_n, 'norm_index')
+        return agg_data_norm_polyfit, agg_data_norm_polyfit_sign
+
+    def generate_agg_data_norm_columns_polyfit(self, poly_n):
+        agg_data_norm = self.generate_agg_data_norm_columns() if self.agg_data_norm_columns is None else self.agg_data_norm_columns
+        agg_data_norm_polyfit, agg_data_norm_polyfit_sign = \
+            self._generate_agg_data_polyfit(agg_data_norm, poly_n, 'norm_columns')
+        return agg_data_norm_polyfit, agg_data_norm_polyfit_sign
+
     def generate_agg_data_ratio_polyfit(self, poly_n):
         agg_data_ratio = self.generate_agg_data_ratio() if self.agg_data_ratio is None else self.agg_data_ratio
         agg_data_ratio_polyfit, agg_data_ratio_polyfit_sign = \
             self._generate_agg_data_polyfit(agg_data_ratio, poly_n, 'ratio')
         return agg_data_ratio_polyfit, agg_data_ratio_polyfit_sign
 
-    def generate_agg_data_norm_polyfit(self, poly_n):
-        agg_data_norm = self.generate_agg_data_norm() if self.agg_data_norm is None else self.agg_data_norm
-        agg_data_norm_polyfit, agg_data_norm_polyfit_sign = \
-            self._generate_agg_data_polyfit(agg_data_norm, poly_n, 'norm')
-        return agg_data_norm_polyfit, agg_data_norm_polyfit_sign
-
     def generate_data_stats(self):
         agg_data = self.generate_agg_data() if self.agg_data is None else self.agg_data
-        agg_data_stats = self._generate_stats(agg_data)
+        agg_data_stats = self._generate_stats(agg_data, 'data')
         return agg_data_stats
+
+    def generate_data_norm_index_stats(self):
+        agg_data_norm_index = self.generate_agg_data_norm_index() if self.agg_data_norm_index is None else self.agg_data_norm_index
+        agg_data_norm_stats = self._generate_stats(agg_data_norm_index, 'norm_index')
+        return agg_data_norm_stats
+
+    def generate_data_norm_column_stats(self):
+        agg_data_norm_columns = self.generate_agg_data_norm_columns() if self.agg_data_norm_columns is None else self.agg_data_norm_columns
+        agg_data_norm_stats = self._generate_stats(agg_data_norm_columns, 'norm_columns')
+        return agg_data_norm_stats
 
     def generate_data_ratio_stats(self):
         agg_data_ratio = self.generate_agg_data_ratio() if self.agg_data_ratio is None else self.agg_data_ratio
-        agg_data_ratio_stats = self._generate_stats(agg_data_ratio)
+        agg_data_ratio_stats = self._generate_stats(agg_data_ratio, 'ratio')
         return agg_data_ratio_stats
 
-    def generate_data_norm_stats(self):
-        agg_data_norm = self.generate_agg_data_norm() if self.agg_data_norm is None else self.agg_data_norm
-        agg_data_norm_stats = self._generate_stats(agg_data_norm)
-        return agg_data_norm_stats
+    def generate_index_apply(self, index_apply_func, feat_name):
+        agg_data = self.generate_agg_data() if self.agg_data is None else self.agg_data
+        result_data = agg_data.apply(index_apply_func, axis=1)
+        result_data = pd.DataFrame(result_data)
+        result_data.columns = [self.feat_name + '_' + feat_name]
+        return result_data
 
 
 class FeatureTradeTS(Feature):
@@ -308,7 +340,7 @@ class FeatureTradeTS(Feature):
         self.window_data_ratio = window_data_ratio.copy()
         return window_data_ratio
 
-    def generate_window_data_ratio_polyfit(self,poly_n):
+    def generate_window_data_ratio_polyfit(self, poly_n):
         self._check_window_data_ratio_exist()
         window_data_ratio = self.window_data_ratio
         window_num = self.window_num
@@ -349,7 +381,7 @@ class FeatureTradeTarget(Feature):
         self.aim_col = aim_col
         self.stock_indu_col = stock_indu_col
         self.data = data[col_list]
-        self.data_group = data.groupbu([cust_id_col,stock_indu_col])
+        self.data_group = data.groupby([cust_id_col, stock_indu_col])
         self.func = _check_func(func)
 
 
@@ -358,6 +390,73 @@ class FeatureTradeTarget(Feature):
         cust_id_col = self.cust_id_col
         aim_col = self.aim_col
         stock_indu_col = self.stock_indu_col
+
+class FeatureAreaLevel(Feature):
+    def __init__(self):
+        self.area_dict={u'上海': 2, u'北京': 2, u'广东': 2, u'浙江': 1, u'江苏': 1, u'山东': 1, u'福建': 1,
+               u'湖南': 0, u'湖北': 0, u'江西': 0, u'河南': 0, u'广西': 0, u'辽宁': 0, u'黑龙江': 0,
+               u'山西': 0, u'天津': 0, u'河北': 0, u'云南': 0, u'安徽': 0, u'吉林': 0, u'内蒙': 0, u'青海': 0,
+               u'四川': 0, u'重庆': 0, u'贵州': 0, u'新疆': 0, u'陕西': 0, u'甘肃': 0, u'海南': 0, u'宁夏': 0}
+    def generate(self, area):
+        area = area.copy()
+        b.check_series(area)
+        area_level = dp_base.value_map(area, self.area_dict)
+        return area_level
+
+
+
+def script_get_features(cust_info, cust_trade):
+    cust_feat = cust_info[[]]
+    fec = FeatureExtractColumn(cust_info)
+    # Set y
+    cust_feat['y'] = fec.generate('y')
+    ## Generate attributes of customer
+    # Age
+    cust_feat['age'] = FeatureAge().generate_from_date_birthday(cust_info['birthday_date'], datetime(2019, 1, 1))
+    cust_feat['gender'] = fec.generate('gender')
+    cust_feat['open_age'] = FeatureAge().generate_from_date_birthday(cust_info['khrq_date'], datetime(2019, 1, 1))
+    # Area
+    cust_feat['area_level'] = FeatureAreaLevel().generate(cust_info['area'])
+    ## Generate attributes of customer's asset
+    cust_feat['asset_start_all_ln'] = fec.generate_log1p('start_jyzc')
+    cust_feat['asset_end_all_ln'] = fec.generate_log1p('end_jyzc')
+    cust_feat['asset_start_cash_ln'] = fec.generate_log1p('start_cash')
+    cust_feat['asset_end_cash_ln'] = fec.generate_log1p('end_cash')
+    cust_feat['asset_start_products_ln'] = fec.generate_log1p('start_jrcp')
+    cust_feat['asset_end_products_ln'] = fec.generate_log1p('end_jrcp')
+    cust_feat['asset_start_ratio_cash'] = cust_info['start_cash']/cust_info['start_jyzc']
+    cust_feat['asset_end_ratio_cash'] = cust_info['end_cash']/cust_info['end_jyzc']
+    cust_feat['asset_start_ratio_products'] = cust_info['start_jrcp']/cust_info['start_jyzc']
+    cust_feat['asset_end_ratio_products'] = cust_info['end_jrcp']/cust_info['end_jyzc']
+    cust_feat['profit'] = fec.generate('profit')
+    cust_feat['is_profit'] = 0
+    cust_feat.loc[cust_feat['profit'] > 0, 'is_profit'] = 1
+    cust_feat['profit_ratio'] = cust_info['profit'] / cust_info['start_jyzc']
+    #Generate stock trade behavior
+    stock_trade = cust_trade.loc[cust_trade['stktype'] == '0', ]
+    cust_feat['trade_count'] = stock_trade.groupby('custid')['sno'].count()
+    afg=AbstractFeatGroupData(stock_trade, 'custid', 'window_id', 'sno', 'count', 'stock_trade_count')
+    cust_feat = pd.merge(cust_feat, afg.generate_data_stats(), left_index=True, right_index=True, how='left')
+    cust_feat = pd.merge(cust_feat, afg.generate_agg_data_norm_index(), left_index=True, right_index=True, how='left')
+    cust_feat = pd.merge(cust_feat, afg.generate_agg_data_norm_columns(), left_index=True, right_index=True, how='left')
+    polyfit_ratio, polyfit_sign = afg.generate_agg_data_norm_index_polyfit(3)
+    cust_feat = pd.merge(cust_feat, polyfit_ratio, left_index=True, right_index=True, how='left')
+    cust_feat = pd.merge(cust_feat, polyfit_sign, left_index=True, right_index=True, how='left')
+    polyfit_ratio, polyfit_sign = afg.generate_agg_data_norm_columns_polyfit(3)
+    cust_feat = pd.merge(cust_feat, polyfit_ratio, left_index=True, right_index=True, how='left')
+    cust_feat = pd.merge(cust_feat, polyfit_sign, left_index=True, right_index=True, how='left')
+    polyfit_ratio, polyfit_sign = afg.generate_agg_data_ratio_polyfit(3)
+    cust_feat = pd.merge(cust_feat, polyfit_ratio, left_index=True, right_index=True, how='left')
+    cust_feat = pd.merge(cust_feat, polyfit_sign, left_index=True, right_index=True, how='left')
+    temp_result = afg.generate_index_apply(lambda x: sum(x > 0), 'have_trade_days')
+    cust_feat = pd.merge(cust_feat, temp_result, left_index=True, right_index=True, how='left')
+    cust_feat['have_trade_days_ratio'] = cust_feat['stock_trade_count_have_trade_days']/afg.agg_data.shape[1]
+    #Generate trade stock attributes
+
+
+
+
+
 
 
 
