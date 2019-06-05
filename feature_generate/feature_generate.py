@@ -384,19 +384,20 @@ class FeatureTradeTarget(Feature):
         self.data_group = data.groupby([cust_id_col, stock_indu_col])
         self.func = _check_func(func)
 
-
     def generate_data_(self):
         data_group = self.data_group
         cust_id_col = self.cust_id_col
         aim_col = self.aim_col
         stock_indu_col = self.stock_indu_col
 
+
 class FeatureAreaLevel(Feature):
     def __init__(self):
-        self.area_dict={u'上海': 2, u'北京': 2, u'广东': 2, u'浙江': 1, u'江苏': 1, u'山东': 1, u'福建': 1,
+        self.area_dict = {u'上海': 2, u'北京': 2, u'广东': 2, u'浙江': 1, u'江苏': 1, u'山东': 1, u'福建': 1,
                u'湖南': 0, u'湖北': 0, u'江西': 0, u'河南': 0, u'广西': 0, u'辽宁': 0, u'黑龙江': 0,
                u'山西': 0, u'天津': 0, u'河北': 0, u'云南': 0, u'安徽': 0, u'吉林': 0, u'内蒙': 0, u'青海': 0,
                u'四川': 0, u'重庆': 0, u'贵州': 0, u'新疆': 0, u'陕西': 0, u'甘肃': 0, u'海南': 0, u'宁夏': 0}
+
     def generate(self, area):
         area = area.copy()
         b.check_series(area)
@@ -405,7 +406,13 @@ class FeatureAreaLevel(Feature):
 
 
 
-def script_get_features(cust_info, cust_trade):
+
+def script_get_features(raw_data_path, cust_info, cust_trade, trade_date):
+    infos_path = raw_data_path + '../../infos/'
+    #Load indutrial data
+    sw_indu = pd.read_excel(infos_path + 'sw_indu.xlsx', dtype={'stock_code': str})
+    sw_index = pd.read_csv(infos_path + 'sw_index.csv')
+    sw_index['DateTime'] = pd.to_datetime(sw_index['DateTime'])
     cust_feat = cust_info[[]]
     fec = FeatureExtractColumn(cust_info)
     # Set y
@@ -452,6 +459,34 @@ def script_get_features(cust_info, cust_trade):
     cust_feat = pd.merge(cust_feat, temp_result, left_index=True, right_index=True, how='left')
     cust_feat['have_trade_days_ratio'] = cust_feat['stock_trade_count_have_trade_days']/afg.agg_data.shape[1]
     #Generate trade stock attributes
+    stock_trade = pd.merge(stock_trade, sw_indu[['stock_code', 'indu_id']], left_on='stkcode', right_on='stock_code', how='left')
+    trade_date_window_last_day = trade_date.reset_index().groupby('window_id').max().reset_index()
+    sw_index = pd.merge(sw_index, trade_date_window_last_day, how='inner', left_on='DateTime', right_on='DateTime')
+    sw_index = sw_index.drop(columns=['DateTime']).set_index('window_id').sort_index()
+    sw_index_window_return = sw_index / sw_index.shift(1) - 1
+    afg = AbstractFeatGroupData(stock_trade, 'custid', 'indu_id', 'sno', 'count', 'sw_indu_trade_count')
+    cust_feat = pd.merge(cust_feat, afg.generate_agg_data_ratio(), left_index=True, right_index=True, how='left')
+    cust_feat = pd.merge(cust_feat, afg.generate_agg_data_norm_columns(), left_index=True, right_index=True, how='left')
+    sw_code_dict = sw_indu.groupby('indu_code')['indu_id'].apply(lambda x: x.iloc[0]).to_dict()
+    columns_dict = dict()
+    for i in range(len(sw_index_window_return.columns)):
+        columns_dict[sw_index_window_return.columns[i]] = 'SI' + sw_index_window_return.columns[i][:6]
+    sw_index_window_return.rename(columns=columns_dict, inplace=True)
+    sw_index_window_return.rename(columns=sw_code_dict, inplace=True)
+    del columns_dict, sw_code_dict
+    sw_index_window_return.dropna(inplace=True)
+    sw_index_window_return.columns.name = 'indu_id'
+    trade_count = stock_trade.groupby(['custid', 'indu_id', 'window_id'])['sno'].count().reset_index()
+    sw_index_window_return = sw_index_window_return.stack().reset_index().rename(columns={0: 'return'})
+    trade_count = pd.merge(trade_count, sw_index_window_return, left_on=['indu_id', 'window_id'],
+                           right_on=['indu_id', 'window_id'], how='left').dropna().set_index('custid')
+    cust_feat['ret_pearson'] = np.nan
+    for i in cust_feat.index:
+        x = pd.Series(trade_count.loc[i, 'sno']).values
+        y = pd.Series(trade_count.loc[i, 'return']).values
+        if len(x) >= 6:
+            cust_feat.loc[i, 'ret_pearson'] = np.corrcoef(x, y)[0][1]
+
 
 
 

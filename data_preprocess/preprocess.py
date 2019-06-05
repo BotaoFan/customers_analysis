@@ -36,7 +36,11 @@ def cut_window_day_id(date_index, window_days=5):
 
 
 def script_import_and_clean(raw_data_path, start_date, end_date, window=5):
-    trade_date = pd.read_csv(raw_data_path + '../../infos/trade_date.csv')
+    #Load datea
+    infos_path = raw_data_path + '../../infos/'
+    trade_date = pd.read_csv(infos_path + 'trade_date.csv')
+    yyb_info = pd.read_csv(infos_path + 'yyb_area.csv')
+
     trade_date['DateTime'] = pd.to_datetime(trade_date['DateTime'])
     trade_date_range = trade_date.loc[(trade_date['DateTime'] >= start_date) &
                                       (trade_date['DateTime'] <= end_date), 'DateTime']
@@ -65,13 +69,15 @@ def script_import_and_clean(raw_data_path, start_date, end_date, window=5):
     # Generate y
     cust_info['y'] = 0
     cust_info.loc[cust_info['chg_rate'] <= -0.5, 'y'] = 1
-    cust_info.set_index('khh', inplace=True)
+    # Add information
+    cust_info = pd.merge(cust_info, yyb_info, left_on='yyb', right_on='yyb', how='left')
     # Get window_day_id
     cust_trade = pd.merge(cust_trade, trade_date, left_on='bizdate_date', right_index=True, how='inner')
 
     #Deal with cust_trade
     cust_trade['buy'] = 1
     cust_trade.loc[cust_trade['fundeffect'] > 0, 'buy'] = 0
+    cust_info.set_index('khh', inplace=True)
     return trade_date, cust_info, cust_trade
 
 
