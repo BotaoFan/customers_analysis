@@ -38,8 +38,8 @@ def cut_window_day_id(date_index, window_days=5):
 def script_import_and_clean(raw_data_path, start_date, end_date, window=5):
     #Load datea
     infos_path = raw_data_path + '../../infos/'
-    trade_date = pd.read_csv(infos_path + 'trade_date.csv')
-    yyb_info = pd.read_csv(infos_path + 'yyb_area.csv')
+    trade_date = pd.read_csv(infos_path + 'trade_date.csv', encoding='utf-8')
+    yyb_info = pd.read_csv(infos_path + 'yyb_area.csv', encoding='utf-8')
 
     trade_date['DateTime'] = pd.to_datetime(trade_date['DateTime'])
     trade_date_range = trade_date.loc[(trade_date['DateTime'] >= start_date) &

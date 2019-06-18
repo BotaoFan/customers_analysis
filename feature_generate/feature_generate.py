@@ -407,6 +407,7 @@ class FeatureAreaLevel(Feature):
 
 
 
+
 def script_get_features(raw_data_path, cust_info, cust_trade, trade_date):
     infos_path = raw_data_path + '../../infos/'
     #Load indutrial data
@@ -423,18 +424,18 @@ def script_get_features(raw_data_path, cust_info, cust_trade, trade_date):
     cust_feat['gender'] = fec.generate('gender')
     cust_feat['open_age'] = FeatureAge().generate_from_date_birthday(cust_info['khrq_date'], datetime(2019, 1, 1))
     # Area
-    cust_feat['area_level'] = FeatureAreaLevel().generate(cust_info['area'])
+    #cust_feat['area_level'] = FeatureAreaLevel().generate(cust_info['area'])
     ## Generate attributes of customer's asset
-    cust_feat['asset_start_all_ln'] = fec.generate_log1p('start_jyzc')
-    cust_feat['asset_end_all_ln'] = fec.generate_log1p('end_jyzc')
+    #cust_feat['asset_start_all_ln'] = fec.generate_log1p('start_jyzc')
+    #cust_feat['asset_end_all_ln'] = fec.generate_log1p('end_jyzc')
     cust_feat['asset_start_cash_ln'] = fec.generate_log1p('start_cash')
     cust_feat['asset_end_cash_ln'] = fec.generate_log1p('end_cash')
     cust_feat['asset_start_products_ln'] = fec.generate_log1p('start_jrcp')
     cust_feat['asset_end_products_ln'] = fec.generate_log1p('end_jrcp')
-    cust_feat['asset_start_ratio_cash'] = cust_info['start_cash']/cust_info['start_jyzc']
-    cust_feat['asset_end_ratio_cash'] = cust_info['end_cash']/cust_info['end_jyzc']
-    cust_feat['asset_start_ratio_products'] = cust_info['start_jrcp']/cust_info['start_jyzc']
-    cust_feat['asset_end_ratio_products'] = cust_info['end_jrcp']/cust_info['end_jyzc']
+    #cust_feat['asset_start_ratio_cash'] = cust_info['start_cash']/cust_info['start_jyzc']
+    #cust_feat['asset_end_ratio_cash'] = cust_info['end_cash']/cust_info['end_jyzc']
+    #cust_feat['asset_start_ratio_products'] = cust_info['start_jrcp']/cust_info['start_jyzc']
+    #cust_feat['asset_end_ratio_products'] = cust_info['end_jrcp']/cust_info['end_jyzc']
     cust_feat['profit'] = fec.generate('profit')
     cust_feat['is_profit'] = 0
     cust_feat.loc[cust_feat['profit'] > 0, 'is_profit'] = 1
@@ -481,13 +482,13 @@ def script_get_features(raw_data_path, cust_info, cust_trade, trade_date):
     trade_count = pd.merge(trade_count, sw_index_window_return, left_on=['indu_id', 'window_id'],
                            right_on=['indu_id', 'window_id'], how='left').dropna().set_index('custid')
     cust_feat['ret_pearson'] = np.nan
-    for i in cust_feat.index:
+    for i in trade_count.index.unique():
         x = pd.Series(trade_count.loc[i, 'sno']).values
         y = pd.Series(trade_count.loc[i, 'return']).values
         if len(x) >= 6:
             cust_feat.loc[i, 'ret_pearson'] = np.corrcoef(x, y)[0][1]
 
-
+    return cust_feat
 
 
 
