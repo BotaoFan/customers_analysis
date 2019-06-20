@@ -405,7 +405,85 @@ class FeatureAreaLevel(Feature):
         return area_level
 
 
+def _sciprt_features_info(raw_data_path):
+    infos_path = raw_data_path + '../../infos/'
+    #Load indutrial data
+    sw_indu = pd.read_excel(infos_path + 'sw_indu.xlsx', dtype={'stock_code': str})
+    sw_index = pd.read_csv(infos_path + 'sw_index.csv')
+    sw_index['DateTime'] = pd.to_datetime(sw_index['DateTime'])
+    return sw_indu, sw_index
 
+
+def script_cust_attribute_features(raw_data_path, cust_info, trade_date):
+    sw_indu, sw_index = _sciprt_features_info(raw_data_path)
+    cust_feat = cust_info[[]]
+    fec = FeatureExtractColumn(cust_info)
+    # Set y
+    cust_feat['y'] = fec.generate('y')
+    ## Generate attributes of customer
+    cust_feat['age'] = FeatureAge().generate_from_date_birthday(cust_info['birthday_date'], datetime(2019, 1, 1))
+    cust_feat['gender'] = fec.generate('gender')
+    cust_feat['open_age'] = FeatureAge().generate_from_date_birthday(cust_info['khrq_date'], datetime(2019, 1, 1))
+    cust_feat['asset_start_cash_ln'] = fec.generate_log1p('start_cash')
+    cust_feat['asset_start_products_ln'] = fec.generate_log1p('start_jrcp')
+    cust_feat['profit'] = fec.generate('profit')
+    cust_feat['is_profit'] = 0
+    cust_feat.loc[cust_feat['profit'] > 0, 'is_profit'] = 1
+    cust_feat['profit_ratio'] = cust_info['profit'] / cust_info['start_jyzc']
+    return cust_feat
+
+
+def script_stock_trade_features(raw_data_path, cust_info, cust_trade, trade_date, long=True):
+    sw_indu, sw_index = _sciprt_features_info(raw_data_path)
+    stock_trade = cust_trade.loc[(cust_trade['stktype'] == '0') & (cust_trade['buy'] == int(long)), ]
+    #Generate stock trade behavior
+    cust_feat = cust_info[[]]
+    cust_feat['trade_count'] = stock_trade.groupby('custid')['sno'].count()
+    afg=AbstractFeatGroupData(stock_trade, 'custid', 'window_id', 'sno', 'count', 'stock_trade_count')
+    cust_feat = pd.merge(cust_feat, afg.generate_data_stats(), left_index=True, right_index=True, how='left')
+    cust_feat = pd.merge(cust_feat, afg.generate_agg_data_norm_index(), left_index=True, right_index=True, how='left')
+    cust_feat = pd.merge(cust_feat, afg.generate_agg_data_norm_columns(), left_index=True, right_index=True, how='left')
+    polyfit_ratio, polyfit_sign = afg.generate_agg_data_norm_index_polyfit(3)
+    cust_feat = pd.merge(cust_feat, polyfit_ratio, left_index=True, right_index=True, how='left')
+    cust_feat = pd.merge(cust_feat, polyfit_sign, left_index=True, right_index=True, how='left')
+    polyfit_ratio, polyfit_sign = afg.generate_agg_data_norm_columns_polyfit(3)
+    cust_feat = pd.merge(cust_feat, polyfit_ratio, left_index=True, right_index=True, how='left')
+    cust_feat = pd.merge(cust_feat, polyfit_sign, left_index=True, right_index=True, how='left')
+    polyfit_ratio, polyfit_sign = afg.generate_agg_data_ratio_polyfit(3)
+    cust_feat = pd.merge(cust_feat, polyfit_ratio, left_index=True, right_index=True, how='left')
+    cust_feat = pd.merge(cust_feat, polyfit_sign, left_index=True, right_index=True, how='left')
+    temp_result = afg.generate_index_apply(lambda x: sum(x > 0), 'have_trade_days')
+    cust_feat = pd.merge(cust_feat, temp_result, left_index=True, right_index=True, how='left')
+    cust_feat['have_trade_days_ratio'] = cust_feat['stock_trade_count_have_trade_days']/afg.agg_data.shape[1]
+    #Generate trade stock attributes
+    stock_trade = pd.merge(stock_trade, sw_indu[['stock_code', 'indu_id']], left_on='stkcode', right_on='stock_code', how='left')
+    trade_date_window_last_day = trade_date.reset_index().groupby('window_id').max().reset_index()
+    sw_index = pd.merge(sw_index, trade_date_window_last_day, how='inner', left_on='DateTime', right_on='DateTime')
+    sw_index = sw_index.drop(columns=['DateTime']).set_index('window_id').sort_index()
+    sw_index_window_return = sw_index / sw_index.shift(1) - 1
+    afg = AbstractFeatGroupData(stock_trade, 'custid', 'indu_id', 'sno', 'count', 'sw_indu_trade_count')
+    cust_feat = pd.merge(cust_feat, afg.generate_agg_data_ratio(), left_index=True, right_index=True, how='left')
+    cust_feat = pd.merge(cust_feat, afg.generate_agg_data_norm_columns(), left_index=True, right_index=True, how='left')
+    sw_code_dict = sw_indu.groupby('indu_code')['indu_id'].apply(lambda x: x.iloc[0]).to_dict()
+    columns_dict = dict()
+    for i in range(len(sw_index_window_return.columns)):
+        columns_dict[sw_index_window_return.columns[i]] = 'SI' + sw_index_window_return.columns[i][:6]
+    sw_index_window_return.rename(columns=columns_dict, inplace=True)
+    sw_index_window_return.rename(columns=sw_code_dict, inplace=True)
+    del columns_dict, sw_code_dict
+    sw_index_window_return.dropna(inplace=True)
+    sw_index_window_return.columns.name = 'indu_id'
+    trade_count = stock_trade.groupby(['custid', 'indu_id', 'window_id'])['sno'].count().reset_index()
+    sw_index_window_return = sw_index_window_return.stack().reset_index().rename(columns={0: 'return'})
+    trade_count = pd.merge(trade_count, sw_index_window_return, left_on=['indu_id', 'window_id'],
+                           right_on=['indu_id', 'window_id'], how='left').dropna().set_index('custid')
+    cust_feat['ret_pearson'] = np.nan
+    for i in trade_count.index.unique():
+        x = pd.Series(trade_count.loc[i, 'sno']).values
+        y = pd.Series(trade_count.loc[i, 'return']).values
+        if len(x) >= 6:
+            cust_feat.loc[i, 'ret_pearson'] = np.corrcoef(x, y)[0][1]
+    return cust_feat
 
 
 def script_get_features(raw_data_path, cust_info, cust_trade, trade_date):
@@ -429,9 +507,9 @@ def script_get_features(raw_data_path, cust_info, cust_trade, trade_date):
     #cust_feat['asset_start_all_ln'] = fec.generate_log1p('start_jyzc')
     #cust_feat['asset_end_all_ln'] = fec.generate_log1p('end_jyzc')
     cust_feat['asset_start_cash_ln'] = fec.generate_log1p('start_cash')
-    cust_feat['asset_end_cash_ln'] = fec.generate_log1p('end_cash')
+    #cust_feat['asset_end_cash_ln'] = fec.generate_log1p('end_cash')
     cust_feat['asset_start_products_ln'] = fec.generate_log1p('start_jrcp')
-    cust_feat['asset_end_products_ln'] = fec.generate_log1p('end_jrcp')
+    #cust_feat['asset_end_products_ln'] = fec.generate_log1p('end_jrcp')
     #cust_feat['asset_start_ratio_cash'] = cust_info['start_cash']/cust_info['start_jyzc']
     #cust_feat['asset_end_ratio_cash'] = cust_info['end_cash']/cust_info['end_jyzc']
     #cust_feat['asset_start_ratio_products'] = cust_info['start_jrcp']/cust_info['start_jyzc']

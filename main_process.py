@@ -12,6 +12,7 @@ from customers_analysis.data_preprocess import base as dp_base
 from customers_analysis import base as b
 from customers_analysis.model_training import base  as mt_base
 from customers_analysis.feature_generate import feature_generate as fg
+from xgboost import XGBClassifier
 
 warnings.filterwarnings('ignore')
 
@@ -23,7 +24,11 @@ if __name__ == '__main__':
     raw_data_path = abs_path + 'raw_data/raw_data_customers_loss_1701_1704/'
 
     trade_date, cust_info, cust_trade = pp.script_import_and_clean(raw_data_path, datetime(2017, 1, 1), datetime(2017, 3, 31), 5)
-    cust_feat = fg.script_get_features(raw_data_path, cust_info, cust_trade, trade_date)
+    cust_feat = fg.script_cust_attribute_features(raw_data_path, cust_info, trade_date)
+    cust_feat_stock_trade_long = fg.script_stock_trade_features(raw_data_path, cust_info, cust_trade, trade_date, long=True)
+    cust_feat_stock_trade_short = fg.script_stock_trade_features(raw_data_path, cust_info, cust_trade, trade_date, long=False)
+    cust_feat = pd.merge(cust_feat, cust_feat_stock_trade_long, how='left', left_index=True, right_index=True, suffixes=('', '_long'))
+    cust_feat = pd.merge(cust_feat, cust_feat_stock_trade_short, how='left', left_index=True, right_index=True, suffixes=('', '_short'))
 
     train_count = int(cust_feat.shape[0]*0.8)
     train_set = cust_feat[:train_count]
@@ -64,7 +69,7 @@ if __name__ == '__main__':
     xgb_trainer.cv_paras(other_paras, cv_paras)
 
     #Show test result
-    paras = {'learning_rate': 0.1,'n_estimators': 50, 'min_child_weight': 3, 'max_depth': 6,
+    paras = {'learning_rate': 0.1,'n_estimators': 50, 'min_child_weight': 1, 'max_depth': 5,
               'seed': 0, 'gamma': 4, 'subsample': 0.8, 'colsample_bytree': 0.8}
 
     model = XGBClassifier(**paras)
